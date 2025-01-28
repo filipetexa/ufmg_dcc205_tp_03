@@ -106,7 +106,3 @@ TP/
 ## Licença
 Este projeto foi desenvolvido exclusivamente para fins acadêmicos e está sob as diretrizes da disciplina.
 ```
-
----
-
-Este README cobre todos os aspectos gerais do projeto, incluindo contexto, funcionalidades e instruções para execução. Caso precise de algum ajuste ou queira adicionar mais detalhes, é só avisar!
