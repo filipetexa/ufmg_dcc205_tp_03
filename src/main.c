@@ -1,13 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "voo.h"
 #include "lista_voos.h"
 #include "consulta.h"
 #include "arvore_avl.h"
+#include "filtros.h"
 
 // Função para ler a lista de voos do arquivo de entrada
 ListaVoos* ler_lista_voos(FILE* arquivo, int* num_voos) {
-    fscanf(arquivo, "%d", num_voos); // Lê o número de voos
+    fscanf(arquivo, "%d", num_voos);
 
     ListaVoos* lista = criar_lista_voos(*num_voos);
     if (lista == NULL) {
@@ -24,7 +26,6 @@ ListaVoos* ler_lista_voos(FILE* arquivo, int* num_voos) {
 
         fscanf(arquivo, "%s %s %f %d %s %s %d", origem, destino, &preco, &assentos, partida_str, chegada_str, &paradas);
 
-        // Converter strings de data/hora para time_t (UTC)
         struct tm partida_tm = {0}, chegada_tm = {0};
         strptime(partida_str, "%Y-%m-%dT%H:%M:%S", &partida_tm);
         strptime(chegada_str, "%Y-%m-%dT%H:%M:%S", &chegada_tm);
@@ -40,7 +41,7 @@ ListaVoos* ler_lista_voos(FILE* arquivo, int* num_voos) {
 
 // Função para ler consultas do arquivo de entrada
 Consulta* ler_consultas(FILE* arquivo, int* num_consultas) {
-    fscanf(arquivo, "%d", num_consultas); // Lê o número de consultas
+    fscanf(arquivo, "%d", num_consultas);
 
     Consulta* consultas = (Consulta*)malloc(*num_consultas * sizeof(Consulta));
     if (consultas == NULL) {
@@ -50,17 +51,75 @@ Consulta* ler_consultas(FILE* arquivo, int* num_consultas) {
 
     for (int i = 0; i < *num_consultas; i++) {
         int max_resultados;
-        char criterio[4], filtros_str[100];
+        char criterio[4], filtros_str[256];
 
         fscanf(arquivo, "%d %s %[^\n]", &max_resultados, criterio, filtros_str);
 
-        // TODO: Implementar parsing de filtros para criar a árvore sintática
-        NoFiltro* filtros = NULL;
-
+        NoFiltro* filtros = construir_arvore_filtros(filtros_str);
         consultas[i] = criar_consulta(max_resultados, criterio, filtros);
     }
 
     return consultas;
+}
+
+// Função de comparação para ordenação dos voos
+int comparar_voos(const void* a, const void* b, void* criterio) {
+    Voo* voo1 = (Voo*)a;
+    Voo* voo2 = (Voo*)b;
+    char* ordem = (char*)criterio;
+
+    for (int i = 0; i < 3; i++) {
+        switch (ordem[i]) {
+            case 'p': // Ordenar por preço
+                if (voo1->preco != voo2->preco)
+                    return (voo1->preco > voo2->preco) ? 1 : -1;
+                break;
+            case 'd': // Ordenar por duração
+                if (voo1->duracao != voo2->duracao)
+                    return (voo1->duracao > voo2->duracao) ? 1 : -1;
+                break;
+            case 's': // Ordenar por paradas
+                if (voo1->paradas != voo2->paradas)
+                    return (voo1->paradas > voo2->paradas) ? 1 : -1;
+                break;
+        }
+    }
+    return 0;
+}
+
+// Função para processar uma consulta
+void processar_consulta(const Consulta* consulta, const ListaVoos* lista_voos) {
+    Voo* voos_filtrados = (Voo*)malloc(lista_voos->tamanho * sizeof(Voo));
+    if (voos_filtrados == NULL) {
+        fprintf(stderr, "Erro ao alocar memória para voos filtrados.\n");
+        return;
+    }
+
+    int num_resultados = 0;
+
+    // Aplicar os filtros
+    for (int i = 0; i < lista_voos->tamanho; i++) {
+        if (avaliar_filtros(&lista_voos->voos[i], consulta->filtros)) {
+            voos_filtrados[num_resultados++] = lista_voos->voos[i];
+        }
+    }
+
+    // Ordenar os resultados conforme o critério de ordenação
+    qsort_r(voos_filtrados, num_resultados, sizeof(Voo), comparar_voos, (void*)consulta->criterio);
+
+    // Imprimir a consulta original
+    printf("%d %s ", consulta->max_resultados, consulta->criterio);
+    // Aqui estamos imprimindo os filtros como placeholder
+    printf("FILTROS\n"); // Substituir depois por função que imprime os filtros corretamente
+
+    // Exibir no máximo `max_resultados`
+    for (int i = 0; i < consulta->max_resultados && i < num_resultados; i++) {
+        Voo v = voos_filtrados[i];
+        printf("%s %s %.2f %d %ld %ld %d\n", v.origem, v.destino, v.preco, v.assentos,
+               v.partida, v.chegada, v.paradas);
+    }
+
+    free(voos_filtrados);
 }
 
 // Função principal
@@ -86,9 +145,7 @@ int main(int argc, char* argv[]) {
 
     // Processar cada consulta
     for (int i = 0; i < num_consultas; i++) {
-        printf("%d %s %s\n", consultas[i].max_resultados, consultas[i].criterio, "FILTROS"); // Placeholder para filtros
-
-        // TODO: Processar a consulta e imprimir os resultados
+        processar_consulta(&consultas[i], lista_voos);
     }
 
     // Limpar memória
